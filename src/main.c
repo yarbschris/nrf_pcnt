@@ -1,27 +1,18 @@
 #include <nrfx_timer.h>
 #include <nrfx_ppi.h>
+#include <nrfx_gpiote.h>
 #include <zephyr/kernel.h>
 
-#define TIMER_NUM 0 // Change this if application already uses default timer (0)
+// Counts the number of pulses on a GPIO pin without CPU interrupts
 
+#define TIMER_NUM 0 // Change this if application already uses default timer (0)
+#define GPIOTE_INSTANCE 0
+
+// Timer - In counter mode, will only be incremented when COUNT task is triggered by PPI. Also functions to get counter value and clear value
 static const nrfx_timer_t pcntTimer = NRFX_TIMER_INSTANCE(TIMER_NUM);
 
-// FOR PPI TESTING
-
-static const nrfx_timer_t cntTimer = NRFX_TIMER_INSTANCE(1);
-void setupCntTimer() {
-        nrfx_timer_config_t cntTimerConfig = NRFX_TIMER_DEFAULT_CONFIG(1000000);
-        uint32_t err = nrfx_timer_init(&cntTimer, &cntTimerConfig, NULL);
-        if (err != 0) {
-                printk("nrfx_timer_init error: %08x", err);
-                return;
-        }
-        uint32_t timer_ticks = nrfx_timer_us_to_ticks(&cntTimer, 1);
-        nrfx_timer_extended_compare(&cntTimer, NRF_TIMER_CC_CHANNEL1, timer_ticks, NRF_TIMER_SHORT_COMPARE1_CLEAR_MASK, false);
-}
-
 void setupTimer() {
-  nrfx_timer_config_t pcntTimerConfig = NRFX_TIMER_DEFAULT_CONFIG(9000000);
+  nrfx_timer_config_t pcntTimerConfig = NRFX_TIMER_DEFAULT_CONFIG(1000000);
   pcntTimerConfig.mode = NRF_TIMER_MODE_COUNTER;
 
   nrfx_err_t errCode = nrfx_timer_init(&pcntTimer, &pcntTimerConfig, NULL);
@@ -35,45 +26,82 @@ void setupTimer() {
   printk("timer enabled\n");
 }
 
-void clearCounter() {
+void clearTimer() {
   printk("Clearing pcntTimer\n");
   nrfx_timer_clear(&pcntTimer);
 }
 
-uint32_t getCounterVal() {
+uint32_t getTimerVal() {
   nrfx_timer_capture(&pcntTimer, NRF_TIMER_CC_CHANNEL0);
   uint32_t val = nrfx_timer_capture_get(&pcntTimer, NRF_TIMER_CC_CHANNEL0);
   printk("Current pcntTimer value: %u\n", val);
   return val;
 }
 
-uint32_t getCounterCountAddress() {
-        printk("Getting counter COUNT address...\n");
-        uint32_t addr = nrfx_timer_task_address_get(&pcntTimer, NRF_TIMER_TASK_COUNT);
-        printk("Address: %u", addr);
-        return addr;
+// GPIOTE - Will trigger an event that tells timer to increment
+nrfx_gpiote_t pulseInstance = NRFX_GPIOTE_INSTANCE(GPIOTE_INSTANCE);
+nrfx_gpiote_pin_t pulsePin = 11;
+uint8_t inChannel;
+
+void setupGPIOTE() {
+        nrfx_err_t errCode;
+        // Initialize GPIOTE
+        /* According to error code, this is already done, so comment out for right now
+        errCode = nrfx_gpiote_init(&pulseInstance, 0);
+        if (errCode != NRFX_SUCCESS) {
+                printk("Error during gpiote init\n");
+                printk("Error code: %d\n", errCode);
+        }
+        */
+
+        // Allocate GPIOTE Channel
+        errCode = nrfx_gpiote_channel_alloc(&pulseInstance, &inChannel);
+        if (errCode != NRFX_SUCCESS) {
+                printk("Error during gpiote alloc\n");
+                printk("Error code: %d\n", errCode);
+        }
+        
+        // Configure pulse pin to generate an event on high to low transition
+        static const nrf_gpio_pin_pull_t pullConfig = NRF_GPIO_PIN_PULLUP;
+        nrfx_gpiote_trigger_config_t triggerConfig = {
+                .trigger = NRFX_GPIOTE_TRIGGER_HITOLO,
+                .p_in_channel = &inChannel,
+        };
+
+        nrfx_gpiote_input_pin_config_t inputConfig = {
+                .p_pull_config = &pullConfig,
+                .p_trigger_config = &triggerConfig,
+        };
+
+        errCode = nrfx_gpiote_input_configure(&pulseInstance, pulsePin, &inputConfig);
+        if (errCode != NRFX_SUCCESS) {
+                printk("Error during gpiote config\n");
+                printk("Error code: %d\n", errCode);
+        }
+
+        nrfx_gpiote_trigger_enable(&pulseInstance, pulsePin, false);
 }
 
-// PPI
+// PPI - Pulse event on GPIO pin -> COUNT task in timer
 static nrf_ppi_channel_t ppiChannel;
 void setupPPI() {
         nrfx_ppi_channel_alloc(&ppiChannel);
 
         nrfx_ppi_channel_assign(ppiChannel,
-                nrfx_timer_compare_event_address_get(&cntTimer, NRF_TIMER_CC_CHANNEL1),
+                nrfx_gpiote_in_event_address_get(&pulseInstance, pulsePin),
                 nrfx_timer_task_address_get(&pcntTimer, NRF_TIMER_TASK_COUNT));
 
         nrfx_ppi_channel_enable(ppiChannel);
 }
 
-int main(void) {
+int main() {
   setupTimer();
-  setupCntTimer();
+  setupGPIOTE();
   setupPPI();
-  nrfx_timer_enable(&cntTimer);
   printk("Finished Setup\n");
   while(1) {
-        getCounterVal();
+        getTimerVal();
+        k_msleep(1000);
   }
   return 0;
 }
