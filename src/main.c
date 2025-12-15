@@ -23,7 +23,6 @@ void setupTimer() {
 // Will be replaced with a timer COUNT event triggered by gpio pin further along
 // This function is for test purposes
 void incrementCounter() {
-  printk("Incrementing!\n");
   nrfx_timer_increment(&pcntTimer);
 }
 
@@ -39,19 +38,18 @@ uint32_t getCounterVal() {
   return val;
 }
 
+uint32_t getCounterCountAddress() {
+        printk("Getting counter COUNT address...\n");
+        uint32_t addr = nrfx_timer_task_address_get(&pcntTimer, NRF_TIMER_TASK_COUNT);
+        printk("Address: %u", addr);
+        return addr;
+}
+
 int main(void) {
   printk("Starting...\n");
   k_msleep(100);
   setupTimer();
   printk("Finished Setup\n");
-  getCounterVal();
-  incrementCounter();
-  getCounterVal();
-  clearCounter();
-  getCounterVal();
-  for (int i = 0; i < 5; i++) {
-    incrementCounter();
-  }
-  getCounterVal();
+  getCounterCountAddress();
   return 0;
 }
