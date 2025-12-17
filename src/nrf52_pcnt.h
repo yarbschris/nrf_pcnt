@@ -3,7 +3,7 @@
 #include <nrfx_ppi.h>
 
 // pcntInit: Initialize Timer, GPIOTE, and PPI peripherals. Param pulsePin is input pin
-void pcntInit(int pulsePin);
+nrfx_err_t pcntInit(int pulsePin);
 
 // pcntClear: Clears the value of the counter
 void pcntClear();
