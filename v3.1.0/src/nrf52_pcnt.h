@@ -5,12 +5,22 @@
 #include <nrfx_ppi.h>
 #include <nrfx_timer.h>
 
-// pcntInit: Initialize Timer, GPIOTE, and PPI peripherals. Param pulsePin is
-// input pin
-nrfx_err_t pcntInit(int pulsePin);
+// pcntInit: Initialize pulse counter on param pin. The count is latched by
+// hardware once, measureTimeMs after init or the last pcntClearTimer()
+nrfx_err_t pcntInit(int pin, uint16_t measureTimeMs);
 
-// pcntClear: Clears the value of the counter
-void pcntClear();
+// pcntClearCounter: Resets value of counter to zero
+void pcntClearCounter(void);
 
-// pcntGetCount: Captures current value of counter and returns it
-uint32_t pcntGetCount();
+// pcntClearTimer: Resets value of timer to zero (restarts measurement window)
+void pcntClearTimer(void);
+
+// pcntCaptureAndGetCount: Capture current value of counter and return it
+// Since we're using PPI to capture the counter value, should not need to used
+// this function, and pcntGetCount should be used instead
+uint32_t pcntCaptureAndGetCount(void);
+
+// pcntGetCount: Get the last captured value of counter
+uint32_t pcntGetCount(void);
+
+#endif // NRF52_PCNT
